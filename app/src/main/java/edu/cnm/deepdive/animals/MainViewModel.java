@@ -11,6 +11,8 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import edu.cnm.deepdive.animals.model.Animal;
 import edu.cnm.deepdive.animals.service.AnimalService;
+import io.reactivex.Scheduler;
+import io.reactivex.schedulers.Schedulers;
 import java.io.IOException;
 import java.util.List;
 import retrofit2.Response;
@@ -20,63 +22,33 @@ import retrofit2.converter.gson.GsonConverterFactory;
 public class MainViewModel extends AndroidViewModel {
 
   private MutableLiveData<List<Animal>> animals;
+  private MutableLiveData<Throwable> throwable;
+  private AnimalService animalService;
 
   public MainViewModel(@NonNull Application application) {
     super(application);
+    animalService = AnimalService.getInstance();
     animals = new MutableLiveData<>();
+    throwable = new MutableLiveData<>();
     loadAnimals();
   }
+
 
   public LiveData<List<Animal>> getAnimals() {
     return animals;
   }
 
+  public LiveData<Throwable> getThrowable() {
+    return throwable;
+  }
+
   private void loadAnimals() {
 
-    new AsyncTask<Void, Void, List>() {
-
-      AnimalService animalService;
-
-      @Override
-      protected void onPreExecute() {
-        super.onPreExecute();
-        Gson gson = new GsonBuilder()
-            .excludeFieldsWithoutExposeAnnotation()
-            .create();
-        Retrofit retrofit = new Retrofit.Builder()
-            .baseUrl(BuildConfig.BASE_URL)
-            .addConverterFactory(GsonConverterFactory.create(gson))
-            .build();
-
-        animalService = retrofit.create(AnimalService.class);
-      }
-
-      @Override
-      protected List<Animal> doInBackground(Void... voids) {
-
-        try {
-
-          Response<List<Animal>> response = animalService.getAnimals(BuildConfig.CLIENT_KEY)
-              .execute();
-          if (response.isSuccessful()) {
-            List<Animal> animals = response.body();
-            assert animals != null;
-            MainViewModel.this.animals.postValue(animals);
-            return animals;
-
-          } else {
-            cancel(true);
-            Log.e("AnimalService", response.message());
-          }
-
-        } catch (IOException e) {
-          Log.e("AnimalService", e.getMessage(), e);
-          cancel(true);
-        }
-        return null;
-      }
-
-    }.execute();
+    animalService.getAnimals(BuildConfig.CLIENT_KEY)
+        .subscribeOn(Schedulers.io())
+        .subscribe((List<Animal>animals) -> this.animals.postValue(animals),
+            (throwable) -> this.throwable.postValue(throwable));
   }
+
 }
 
